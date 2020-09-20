@@ -1,0 +1,4 @@
+/cache/
+/transmission-files/
+/transmission-state/
+!/transmission-state/settings.json

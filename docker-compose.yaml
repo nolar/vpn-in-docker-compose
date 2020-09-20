@@ -1,0 +1,180 @@
+version: "3"
+
+networks:
+  # A non-default network is needed to control the IP address ranges (used in
+  # some configs), and to avoid affecting other containers in the same Docker.
+  vpn-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.30.172.0/24"
+    enable_ipv6: false
+
+services:
+
+  # A sample application that runs securely only through the VPN, not directly.
+  # It will not actually start until the firewall rules are applied (either
+  # for the first time on creation, or pre-existing block-rules on restarts).
+  # There can any amount of apps configured in the same setup: 0, 1, 2, so on.
+  # If stopped, nothing will happen - the VPN remains available for other apps.
+  transmission:
+    build: .
+    entrypoint: [/app/wait-for-safety.sh]
+    command: [/app/transmission.sh]
+    environment:
+      LOCAL_IPS: 172.30.172.*
+      PEER_PORT: 46112  # as (and if) configured in the VPN provider
+    volumes:
+      - ./:/app
+      - ./transmission-state:/var/lib/transmission
+      - ./transmission-files:/mnt/files
+      - ~/Downloads:/mnt/downloads
+      - ~/Movies:/mnt/movies
+    cap_add: [NET_ADMIN]  # needed for the `wait-for-safety.sh` script
+    restart: unless-stopped
+    stop_signal: SIGTERM
+    network_mode: service:network  # CRITICALLY IMPORTANT!
+
+  # A shared container that is used as a network. It does nothing but sleeps.
+  # Native Docker's networks cannot share the iptables rules cross containers.
+  # The ports of all containers are shared here, as the network-bound containers
+  # cannot share their own ports (including the VPN-secured application).
+  network:
+    build: .
+    command: sleep infinity
+    cap_add: [NET_ADMIN]  # needed only for debugging and README's simulations
+    stop_signal: SIGKILL
+    restart: always
+    dns: [8.8.4.4]
+    ports:
+      - "127.0.0.1:9091:9091"  # application's ports
+    networks:
+      - vpn-network
+
+  # Evaluates the status of the setup, and prints a colorful message about that.
+  # It also generates an HTML file that is later served by the web-view server.
+  # If stopped, the status is not checked and not updated, the old one is shown.
+  status:
+    build: .
+    command:
+      - bash
+      - -c
+      - |
+        while true; do
+          /report-status.sh
+          cat /status/index.ansi
+          sleep 5
+        done
+    environment:
+      NS: 8.8.4.4
+      TZ: Europe/Berlin
+      STATUS_DIR: /status
+    env_file:
+      - ipstack.env
+    volumes:
+      - ./report-status.sh:/report-status.sh:ro
+      - html:/status:rw
+    restart: unless-stopped
+    stop_signal: SIGKILL
+    network_mode: service:network  # CRITICALLY IMPORTANT!
+
+  # Connects and reconnects to the remote VPN server, creates the `tun` device,
+  # configures the default traffic routing through VPN (only when connected).
+  # If stopped, the `tun` device disappears for all other containers,
+  # and the traffic is routed through the default `eth` device (if not blocked).
+  openvpn:
+    build: .
+    command: ["openvpn", "--config", "client.conf"]
+    volumes:
+      - ./openvpn:/etc/openvpn:ro
+    working_dir: /etc/openvpn/airvpn
+    devices: [/dev/net/tun]
+    cap_add: [NET_ADMIN]
+    restart: unless-stopped
+    stop_signal: SIGTERM
+    network_mode: service:network  # CRITICALLY IMPORTANT!
+
+  # Applies the firewall rules to block the traffic from going around VPN.
+  # If stopped, the iptables rules remain applied, but are not re-applied,
+  # which allows their modification manually (incl. unblocking the traffic).
+  firewall:
+    build: .
+    command:
+      - bash
+      - -c
+      - |
+        while true; do
+          /apply-firewall.sh
+          sleep 1s
+        done
+    environment:
+      IPTABLES_FILE_V4: /iptables/iptables-v4.txt
+      IPTABLES_FILE_V6: /iptables/iptables-v6.txt
+    volumes:
+      - ./apply-firewall.sh:/apply-firewall.sh:ro
+      - iptables:/iptables
+    cap_add: [NET_ADMIN]
+    restart: unless-stopped
+    stop_signal: SIGKILL
+    network_mode: service:network  # CRITICALLY IMPORTANT!
+
+  # Generates the firewall rules to be atmomically applied in another container.
+  # It also resolves the IP addresses of the VPN provider into an allow-list,
+  # so that the firewall would not block it on the default `eth` interface.
+  # See the notes in `generate-firewall.sh` on why this needs to be isolated.
+  # If stopped, the dump files are not generated, so they will not be applied.
+  rulemaker:
+    build: .
+    command:
+      - bash
+      - -c
+      - |
+        IPTABLES_FILE_V4=/tmp/null4 \
+        IPTABLES_FILE_V6=/tmp/null6 \
+        ALLOWED_IPS_FILE= ALLOWED_IPS_DIR= \
+          /generate-firewall.sh  # silent insta-block!
+
+        while true; do
+          /update-airvpn-ips.sh
+          /generate-firewall.sh
+          sleep 600
+        done
+    environment:
+      IPTABLES_FILE_V4: /iptables/iptables-v4.txt
+      IPTABLES_FILE_V6: /iptables/iptables-v6.txt
+      ALLOWED_IPS_FILE: /cache/all.txt
+      ALLOWED_IPS_DIR: /cache
+      LOCAL_IPS: 172.30.172.0/24
+      STATUS_IP: 139.130.4.5
+      NS: 8.8.4.4
+    volumes:
+      - ./cache:/cache
+      - ./update-airvpn-ips.sh:/update-airvpn-ips.sh:ro
+      - ./generate-firewall.sh:/generate-firewall.sh:ro
+      - iptables:/iptables
+    dns: [8.8.4.4, 8.8.8.8]
+    cap_add: [NET_ADMIN]
+    restart: unless-stopped
+    stop_signal: SIGKILL
+    network_mode: bridge  # NB! See the comment above, and generate-firewall.sh.
+
+  # A supplimentary web server to publish the HTML status page.
+  # If stopped, the status will not be served via HTTP, but will be shown
+  # in the output anyway; the HTML page will also be generated anyway.
+  # Note: it is not a part of the firewalled network, as there is no need
+  # for utilities to be firewalled. And so, it can have its own ports exposed.
+  # TODO: Is there a proper "Docker way" to run nginx in the "status" container?
+  webview:
+    image: nginx
+    volumes:
+    - ./nginx-no-access-log.conf:/etc/nginx/conf.d/nginx-no-access-log.conf:ro
+    - html:/usr/share/nginx/html:ro
+    restart: unless-stopped
+    stop_signal: SIGTERM
+    ports:
+      - "127.0.0.1:9090:80"
+
+volumes:
+  iptables:
+  html:
