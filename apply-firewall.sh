@@ -9,14 +9,27 @@
 : ${IPTABLES_FILE_V4:="/tmp/iptables.txt"}
 : ${IPTABLES_FILE_V6:="/tmp/ip6tables.txt"}
 
+# New with every new container (e.g. on restarts).
+timestamp_v4=/tmp/timestamp-v4
+timestamp_v6=/tmp/timestamp-v6
+
+# For the first start, always apply the rules.
+if [[ ${1:-} == initial ]]; then
+  rm -f "${timestamp_v4}" "${timestamp_v6}"
+fi
+
 if [[ -e "${IPTABLES_FILE_V4}" ]]; then
-  iptables-restore <"${IPTABLES_FILE_V4}"
-  rm -f "${IPTABLES_FILE_V4}"
-  echo "The firewall is applied (v4)."
+  if [[ ! -e "${timestamp_v4}" || "${IPTABLES_FILE_V4}" -nt "${timestamp_v4}" ]]; then
+    iptables-restore <"${IPTABLES_FILE_V4}"
+    touch "${timestamp_v4}"
+    echo "The firewall is applied (v4)."
+  fi
 fi
 
 if [[ -e "${IPTABLES_FILE_V6}" ]]; then
-  ip6tables-restore <"${IPTABLES_FILE_V6}"
-  rm -f "${IPTABLES_FILE_V6}"
-  echo "The firewall is applied (v6)."
+  if [[ ! -e "${timestamp_v6}" || "${IPTABLES_FILE_V6}" -nt "${timestamp_v6}" ]]; then
+    ip6tables-restore <"${IPTABLES_FILE_V6}"
+    touch "${timestamp_v6}"
+    echo "The firewall is applied (v6)."
+  fi
 fi

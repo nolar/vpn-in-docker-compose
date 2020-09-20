@@ -72,6 +72,15 @@ fi
 : ${IPTABLES_FILE_V4:="/tmp/iptables.txt"}
 : ${IPTABLES_FILE_V6:="/tmp/ip6tables.txt"}
 
+# For the first run (insta-block), block ourselves without initial state/cache,
+# and do not produce no side-effects in the real firewall/network containers.
+if [[ ${1:-} == initial ]]; then
+  IPTABLES_FILE_V4=/tmp/null4
+  IPTABLES_FILE_V6=/tmp/null6
+  ALLOWED_IPS_FILE=
+  ALLOWED_IPS_DIR=
+fi
+
 echo "Generating the firewall rules..."
 
 # Block anything by default, even if there is no single rule.

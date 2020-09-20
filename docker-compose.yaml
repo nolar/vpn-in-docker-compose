@@ -104,6 +104,7 @@ services:
       - bash
       - -c
       - |
+        /apply-firewall.sh initial
         while true; do
           /apply-firewall.sh
           sleep 1s
@@ -113,7 +114,7 @@ services:
       IPTABLES_FILE_V6: /iptables/iptables-v6.txt
     volumes:
       - ./apply-firewall.sh:/apply-firewall.sh:ro
-      - iptables:/iptables
+      - iptables:/iptables:ro
     cap_add: [NET_ADMIN]
     restart: unless-stopped
     stop_signal: SIGKILL
@@ -130,11 +131,7 @@ services:
       - bash
       - -c
       - |
-        IPTABLES_FILE_V4=/tmp/null4 \
-        IPTABLES_FILE_V6=/tmp/null6 \
-        ALLOWED_IPS_FILE= ALLOWED_IPS_DIR= \
-          /generate-firewall.sh  # silent insta-block!
-
+        /generate-firewall.sh initial  # silent insta-block!
         while true; do
           /update-airvpn-ips.sh
           /generate-firewall.sh
@@ -152,7 +149,7 @@ services:
       - ./cache:/cache
       - ./update-airvpn-ips.sh:/update-airvpn-ips.sh:ro
       - ./generate-firewall.sh:/generate-firewall.sh:ro
-      - iptables:/iptables
+      - iptables:/iptables:rw
     dns: [8.8.4.4, 8.8.8.8]
     cap_add: [NET_ADMIN]
     restart: unless-stopped
