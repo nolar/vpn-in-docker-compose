@@ -13,7 +13,7 @@ exec transmission-daemon \
   --encryption-preferred \
   --peerlimit-global 10000 \
   --peerlimit-torrent 1000 \
-  --global-seedratio 0.01 \
+  --global-seedratio 0 \
   --download-dir /mnt/files \
   --no-incomplete-dir \
   --no-lpd \
