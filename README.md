@@ -1,6 +1,6 @@
 # VPN-in-Docker with a network lock
 
-It is ogranised as a collection of containers, each doing its job:
+It is organized as a collection of containers, each doing its job:
 
 * **Network** — a shared networking/firewalling namespace for all containers. 
 * **OpenVPN** — tunnels the traffic through VPN (openvpn-client).
