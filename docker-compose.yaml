@@ -78,20 +78,18 @@ services:
     stop_signal: SIGKILL
     network_mode: service:network  # CRITICALLY IMPORTANT!
 
-  # Connects and reconnects to the remote VPN server, creates the `tun` device,
+  # Connects and reconnects to the remote VPN server, creates the `wg*` devices,
   # configures the default traffic routing through VPN (only when connected).
-  # If stopped, the `tun` device disappears for all other containers,
+  # If stopped, the `wg*` devices disappear for all other containers,
   # and the traffic is routed through the default `eth` device (if not blocked).
-  openvpn:
-    build: .
-    command: ["openvpn", "--config", "client.conf"]
-    volumes:
-      - ./openvpn:/etc/openvpn:ro
-    working_dir: /etc/openvpn/airvpn
-    devices: [/dev/net/tun]
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
     cap_add: [NET_ADMIN]
+    volumes:
+      - ./wireguard:/config/wg_confs
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
     restart: unless-stopped
-    stop_signal: SIGTERM
     network_mode: service:network  # CRITICALLY IMPORTANT!
 
   # Applies the firewall rules to block the traffic from going around VPN.

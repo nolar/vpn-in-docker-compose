@@ -66,7 +66,7 @@ fi
 : ${NS:="8.8.4.4 8.8.8.8"}
 
 # OpenVPN interfaces where the traffic is fully allowed.
-: ${VPN_INTERFACES:="tun+"}
+: ${VPN_INTERFACES:="tun+ wg+"}
 
 # Where to put the resulting dump files.
 : ${IPTABLES_FILE_V4:="/tmp/iptables.txt"}
