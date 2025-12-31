@@ -143,7 +143,7 @@ started=$(now)
 
   echo
   echo "Next hops per interface (only tun* should be permitted):" | ansi bold
-  ip -o a | awk '{print $2}' | sort -u | grep -v '^lo' | xargs -n1 -I {} bash -c 'echo -en "{}\t"; traceroute -n -m1 -q3 -i {} "'"${STATUS_IP}"'" 2>&1 | tail -n+2 || true'
+  ip -o a | awk '{print $2}' | sort -u | grep -v '^lo' | xargs -I {} bash -c 'echo -en "{}\t"; traceroute -n -m1 -q3 -i {} "'"${STATUS_IP}"'" 2>&1 | tail -n+2 || true'
 
   echo
 } >"$temp_file" 2>&1 || true
