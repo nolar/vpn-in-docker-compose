@@ -13,10 +13,10 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/b
 # The script caches the results for 5-10 mins, making ~8640-4320 reqs/month.
 : ${IPSTACK_API_KEY:?"Sign-up for IPStack.com's free plan and get an API key."}
 
-# For how long (seconds) to cache the resolved country of the IP addresses.
+# For how long (minutes) to cache the resolved country of the IP addresses.
 # The information itself changes rarely, but it can be resolved with mistakes.
-# 5-10 mins are good enough to match IPStack's free plan even if running 24/7.
-: ${COUNTRY_CACHE_TIME:=600}
+# For scale: 1d ≈ 1.5k mins, 1mo = 44k.
+: ${COUNTRY_CACHE_TIME:=50000}
 
 # Which IP to ping/traceroute for checking the connection.
 # Just google for "pingable ip".
@@ -98,12 +98,14 @@ started=$(now)
   # Detect the country of our current IP address, i.e. the VPN's outgoing gate.
   # Cache it to reduce the load on the APIs, and to fit into their limits.
   country_cache="/tmp/country-of-${myip}.txt"
-  if [[ -e "${country_cache}" && $(find "${country_cache}" -mmin "+${COUNTRY_CACHE_TIME}") ]]; then
+  if [[ -z "${myip}" ]]; then
+    country="(NO VPN IP)"
+  elif [[ -e "${country_cache}" && $(find "${country_cache}" -mmin "-${COUNTRY_CACHE_TIME}") ]]; then
     country=$(cat "${country_cache}")
   else
-    country=$(curl -s https://ipvigilante.com/ --connect-timeout 1 | jq -r .data.country_name)
+    country=""
     if [[ -z "${country}" ]]; then
-      country=$(curl -s "http://api.ipstack.com/${myip}?access_key=${IPSTACK_API_KEY}" --connect-timeout 1 | jq -r .country_name)
+      country=$(curl -s "http://api.ipstack.com/${myip}?access_key=${IPSTACK_API_KEY}" --connect-timeout 10 | jq -r .country_name)
     fi
     if [[ -n "${country}" || "$country" != null ]]; then
       mkdir -p $(dirname "$country_cache")
