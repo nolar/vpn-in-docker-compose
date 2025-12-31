@@ -1,5 +1,3 @@
-version: "3"
-
 networks:
   # A non-default network is needed to control the IP address ranges (used in
   # some configs), and to avoid affecting other containers in the same Docker.
