@@ -1,4 +1,4 @@
-/cache/
+ipstack.env
 /transmission-files/
 /transmission-state/
 !/transmission-state/settings.json

@@ -26,7 +26,7 @@ set -euo pipefail
 
 # Where the cache of the VPN provider's IP addresses should be stored.
 # The main file is "all.txt". Other files can exist, one per requested scope.
-: ${ALLOWED_IPS_DIR:="$(dirname $0)/cache"}
+: ${ALLOWED_IPS_DIR:="$(dirname $0)/cache/servers"}
 : ${ALLOWED_IPS_FILE:="${ALLOWED_IPS_DIR}/all.txt"}
 
 # Which server scopes to resolve into the IP addresses. AirVPN has scopes
