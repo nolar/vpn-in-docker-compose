@@ -139,13 +139,13 @@ services:
     environment:
       IPTABLES_FILE_V4: /iptables/iptables-v4.txt
       IPTABLES_FILE_V6: /iptables/iptables-v6.txt
-      ALLOWED_IPS_FILE: /cache/all.txt
-      ALLOWED_IPS_DIR: /cache
+      ALLOWED_IPS_FILE: /cache/servers/all.txt
+      ALLOWED_IPS_DIR: /cache/servers
       LOCAL_IPS: 172.30.172.0/24
       STATUS_IP: 139.130.4.5
       NS: 8.8.4.4
     volumes:
-      - ./cache:/cache
+      - ./cache/servers:/cache/servers
       - ./update-airvpn-ips.sh:/update-airvpn-ips.sh:ro
       - ./generate-firewall.sh:/generate-firewall.sh:ro
       - iptables:/iptables:rw
