@@ -73,6 +73,7 @@ services:
     volumes:
       - ./report-status.sh:/report-status.sh:ro
       - html:/status:rw
+      - ./cache/countries:/cache/countries  # for IP stats caching
     restart: unless-stopped
     stop_signal: SIGKILL
     network_mode: service:network  # CRITICALLY IMPORTANT!

@@ -97,7 +97,7 @@ started=$(now)
 
   # Detect the country of our current IP address, i.e. the VPN's outgoing gate.
   # Cache it to reduce the load on the APIs, and to fit into their limits.
-  country_cache="/tmp/country-of-${myip}.txt"
+  country_cache="/cache/countries/${myip}.txt"
   if [[ -z "${myip}" ]]; then
     country="(NO VPN IP)"
   elif [[ -e "${country_cache}" && $(find "${country_cache}" -mmin "-${COUNTRY_CACHE_TIME}") ]]; then
