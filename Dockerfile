@@ -4,7 +4,7 @@ RUN export DEBIAN_FRONTEND=noninteractive \
  && apt-get install -y \
         curl jq toilet colorized-logs rsync \
         dnsutils iputils-ping traceroute iproute2 iptables tcpdump \
-        openvpn \
+        wireguard \
         transmission-daemon \
  && apt-get autoremove -y \
  && apt-get clean -y \
