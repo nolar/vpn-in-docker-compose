@@ -20,7 +20,8 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/b
 
 # Which IP to ping/traceroute for checking the connection.
 # Just google for "pingable ip".
-: ${STATUS_IP:="139.130.4.5"}
+: ${STATUS_IPv4:="139.130.4.5"}
+: ${STATUS_IPv6:="2001:4860:4860::8888"}
 
 # The DNS resolver that is un-blocked in the firewall.
 : ${NS:="8.8.4.4"}
@@ -75,80 +76,118 @@ function now() {
   date +'%Y-%m-%d %H:%M:%S'
 }
 
+# Detect the IP address of the traffic, i.e. how the internet sees us.
+function get_my_ip() {
+  # myip=$( dig $flags TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/"//g' )
+  resolver=""  #$(dig $flags +short resolver1.opendns.com. @"${NS}" +time=1 +tries=1 | sed -e 's/;;.*//')
+  resolver=${resolver:-resolver1.opendns.com.}
+  myip=$(dig "$@" ANY +short myip.opendns.com. "@${resolver}" +time=1 +tries=1 | sed -e 's/;;.*//')
+  echo "$myip"
+}
+
+# Detect the next-hop IP address with the default routing: is it VPN or a local network?
+# 10.*.*.* is a VPN (AirVPN). Everything else is considered to be a local network.
+function get_next_hop() {
+  local flags="$1"  # -4 or -6
+  local status_ip="$2"
+  traceroute $flags -n -m1 -q1 "${status_ip}" 2>/dev/null | tail -n+2 | awk '{print $2}' || true
+}
+
+# Detect the country of our current IP address, i.e. the VPN's outgoing gate.
+# Cache it to reduce the load on the APIs, and to fit into their limits.
+function get_ip_country() {
+  local ip="$1"
+  local cache="/cache/countries/${ip}.txt"
+
+  if [[ -z "${ip}" ]]; then
+    echo ""
+  elif [[ -e "${cache}" && $(find "${cache}" -mmin "-${COUNTRY_CACHE_TIME}") ]]; then
+    cat "${cache}"
+  else
+    country=$(curl -s "https://api.ipstack.com/${ip}?access_key=${IPSTACK_API_KEY}" --connect-timeout 10 | jq -r .country_name)
+    if [[ -n "${country}" || "$country" != null ]]; then
+      mkdir -p $(dirname "$cache")
+      echo "${country}" >"$cache"
+    fi
+    echo "${country}"
+  fi
+}
+
+function report_myip() {
+  if [[ -z "$2" ]]; then
+    echo "Current $1 address cannot be detected:" | ansi gray
+    echo "----" | show | ansi yellow
+  else
+    echo "Current $1 address (for information):" | ansi gray
+    echo "$2" | show | ansi brightwhite
+  fi
+}
+
+function report_country() {
+  if [[ -z "$2" || "$2" == null ]]; then
+    echo "$1 country cannot be detected:" | ansi gray
+    echo "-=-=-=-" | show --filter border | ansi yellow
+  elif [[ "$2" == Germany ]]; then
+    echo "$1 country must NOT be Germany" | ansi red
+    echo "$2" | show --filter border | ansi red blink invert
+  else
+    echo "$1 country is as expected:" | ansi gray
+    echo "$2" | show --filter border | ansi green
+  fi
+}
+
+function report_nexthop() {
+  if [[ -z "$2" ]]; then
+    echo "Next-hop $1 address is absent (blocked):" | ansi gray
+    echo "-*-*-*-" | show | ansi yellow
+  elif [[ "$2" != "$3"* ]]; then
+    echo "Next-hop $1 address must start with $3" | ansi red
+    echo "$2" | show | ansi red
+  else
+    echo "Next-hop $1 address is as expected:" | ansi gray
+    echo "$2" | show | ansi green
+  fi
+}
+
 # Generate the ANSI output and write it to a file.
 started=$(now)
 {
   echo "started $started // updated $(now)" | ansi midgray
   echo
 
-  # TODO: can we also prevent the OpenDNS resolver from being blocked by the firewall?
-  # Detect the IP address of the traffic, i.e. how the internet sees us.
-  # myip=$( dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | sed 's/"//g' )
-  resolver=$(dig +short resolver1.opendns.com @"${NS}" +time=1 +tries=1 | sed -e 's/;;.*//')
-  resolver=${resolver:-resolver1.opendns.com}
-  myip=$(dig +short myip.opendns.com "@${resolver}" +time=1 +tries=1 | sed -e 's/;;.*//')
-  if [[ -z "$myip" ]]; then
-    echo "Current IP address cannot be detected:" | ansi gray
-    echo "?.?.?.?" | show | ansi yellow
-  else
-    echo "Current IP address (for information):" | ansi gray
-    echo "${myip}" | show | ansi brightwhite
-  fi
+  myip4=$(get_my_ip -4)
+  myip6=$(get_my_ip -6)
+  report_myip IPv4 "${myip4}"
+  report_myip IPv6 "${myip6}"
 
-  # Detect the country of our current IP address, i.e. the VPN's outgoing gate.
-  # Cache it to reduce the load on the APIs, and to fit into their limits.
-  country_cache="/cache/countries/${myip}.txt"
-  if [[ -z "${myip}" ]]; then
-    country="(NO VPN IP)"
-  elif [[ -e "${country_cache}" && $(find "${country_cache}" -mmin "-${COUNTRY_CACHE_TIME}") ]]; then
-    country=$(cat "${country_cache}")
-  else
-    country=""
-    if [[ -z "${country}" ]]; then
-      country=$(curl -s "http://api.ipstack.com/${myip}?access_key=${IPSTACK_API_KEY}" --connect-timeout 10 | jq -r .country_name)
-    fi
-    if [[ -n "${country}" || "$country" != null ]]; then
-      mkdir -p $(dirname "$country_cache")
-      echo "${country}" >"$country_cache"
-    fi
-  fi
-  if [[ -z "$country" || "$country" == null ]]; then
-    echo "Country cannot be detected:" | ansi gray
-    echo "-=-=-=-" | show --filter border | ansi yellow
-  elif [[ "$country" == Germany ]]; then
-    echo "Country must NOT be Germany" | ansi red
-    echo "${country}" | show --filter border | ansi red blink invert
-  else
-    echo "Country is as expected:" | ansi gray
-    echo "${country}" | show --filter border | ansi green
-  fi
+  country4=$(get_ip_country "${myip4}")
+  country6=$(get_ip_country "${myip6}")
+  report_country IPv4 "${country4}"
+  report_country IPv6 "${country6}"
 
-  # Detect the next-hop IP address with the default routing: is it VPN or a local network?
-  # 10.*.*.* is a VPN (AirVPN). Everything else is considered to be a local network.
-  nexthop=$(traceroute -n -m1 -q1 "${STATUS_IP}" 2>/dev/null | tail -n+2 | awk '{print $2}' || true)
-  if [[ -z "${nexthop}" ]]; then
-    echo "Next-hop IP address is absent (blocked):" | ansi gray
-    echo "-*-*-*-" | show | ansi yellow
-  elif [[ "${nexthop}" != "10."* ]]; then
-    echo "Next-hop IP address must be 10.*.*.*:" | ansi red
-    echo "${nexthop}" | show | ansi red
-  else
-    echo "Next-hop IP address is as expected:" | ansi gray
-    echo "${nexthop}" | show | ansi green
-  fi
+  nexthop4=$(get_next_hop -4 "${STATUS_IPv4}")
+  nexthop6=$(get_next_hop -6 "${STATUS_IPv6}")
+  report_nexthop IPv4 "${nexthop4}" "10."
+  report_nexthop IPv6 "${nexthop6}" "fd7d:76ee:"
 
   # Print some additional information about the networking setup.
-  # It is better to alwats see it directly rather than interpreted.
+  # It is better to always see it directly rather than interpreted.
   echo
   echo "Available interfaces:" | ansi bold
   ip -oneline -color a show | awk '{print $2 "\t" $3 "\t" $4}'
 
+  # Show next hops per interface, expecting "Operation not permitted" or alike.
+  # We already have this for the main route, but also check for every interface
+  # to make sure these interfaces are firewalled as needed -- for extra safety.
   echo
-  echo "Next hops per interface (only tun* should be permitted):" | ansi bold
-  ip -o a | awk '{print $2}' | sort -u | grep -v '^lo' | xargs -I {} bash -c 'echo -en "{}\t"; traceroute -n -m1 -q3 -i {} "'"${STATUS_IP}"'" 2>&1 | tail -n+2 || true'
+  echo "Next v4 hops per interface (only tun*/wg* should be permitted):" | ansi bold
+  ip -o a | awk '{print $2}' | sort -u | grep -v '^lo' | xargs -I {} bash -c 'echo -en "{}\t"; traceroute -4 -n -m1 -q3 -i {} "'"${STATUS_IPv4}"'" 2>&1 | tail -n+2 || true'
+  echo
+  echo "Next v6 hops per interface (only tun*/wg* should be permitted):" | ansi bold
+  ip -o a | awk '{print $2}' | sort -u | grep -v '^lo' | xargs -I {} bash -c 'echo -en "{}\t"; traceroute -6 -n -m1 -q3 -i {} "'"${STATUS_IPv6}"'" 2>&1 | tail -n+2 || true'
 
   echo
-} >"$temp_file" 2>&1 || true
+} >"$temp_file" || true
 mv -f "${temp_file}" "${ansi_file}"  # atomic switch
 
 # Generate the HTML file, to be served separately.
@@ -157,11 +196,11 @@ mv -f "${temp_file}" "${ansi_file}"  # atomic switch
   echo '<style>body {zoom: 150%;}</style>'
   echo '<meta http-equiv="refresh" content="1" />'
   ansi2html <"${ansi_file}"
-} >"${temp_file}" 2>&1 || true
+} >"${temp_file}" || true
 mv -f "${temp_file}" "${html_file}"  # atomic switch
 
 # Generate the text file, just in case.
 {
   ansi2txt <"${ansi_file}"
-} >"${temp_file}" 2>&1 || true
+} >"${temp_file}" || true
 mv -f "${temp_file}" "${text_file}"  # atomic switch
