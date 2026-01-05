@@ -110,8 +110,8 @@ services:
       IPTABLES_FILE_V4: /iptables/iptables-v4.txt
       IPTABLES_FILE_V6: /iptables/iptables-v6.txt
     volumes:
+      - ./cache/iptables:/iptables:rw
       - ./apply-firewall.sh:/apply-firewall.sh:ro
-      - iptables:/iptables:ro
     cap_add: [NET_ADMIN]
     restart: unless-stopped
     stop_signal: SIGKILL
@@ -143,10 +143,10 @@ services:
       STATUS_IP: 139.130.4.5
       NS: 8.8.4.4
     volumes:
+      - ./cache/iptables:/iptables:rw
       - ./cache/servers:/cache/servers
       - ./update-airvpn-ips.sh:/update-airvpn-ips.sh:ro
       - ./generate-firewall.sh:/generate-firewall.sh:ro
-      - iptables:/iptables:rw
     dns: [8.8.4.4, 8.8.8.8]
     cap_add: [NET_ADMIN]
     restart: unless-stopped
@@ -170,5 +170,4 @@ services:
       - "127.0.0.1:9090:80"
 
 volumes:
-  iptables:
   html:
