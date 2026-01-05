@@ -26,6 +26,10 @@ set -euo pipefail
 : ${NS_V4:="8.8.4.4"}
 : ${NS_V6:="2001:4860:4860::8844"}
 
+# TODO: IPv6 shows "address unreachable" due to some OrbStack/ip6tables issues.
+#  As a workaround, use the IPv4 DNS to resolve IPv6 AAAA records — good enough.
+NS_V6="$NS_V4"
+
 # Where the cache of the VPN provider's IP addresses should be stored.
 # The main file is "all.txt". Other files can exist, one per requested scope.
 : ${ALLOWED_IPS_DIR:="$(dirname $0)/cache/servers"}
