@@ -117,7 +117,7 @@ services:
     stop_signal: SIGKILL
     network_mode: service:network  # CRITICALLY IMPORTANT!
 
-  # Generates the firewall rules to be atmomically applied in another container.
+  # Generates the firewall rules to be atomically applied in another container.
   # It also resolves the IP addresses of the VPN provider into an allow-list,
   # so that the firewall would not block it on the default `eth` interface.
   # See the notes in `generate-firewall.sh` on why this needs to be isolated.

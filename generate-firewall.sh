@@ -73,7 +73,7 @@ fi
 : ${IPTABLES_FILE_V6:="/tmp/ip6tables.txt"}
 
 # For the first run (insta-block), block ourselves without initial state/cache,
-# and do not produce no side-effects in the real firewall/network containers.
+# and produce no side-effects in the real firewall/network containers.
 if [[ ${1:-} == initial ]]; then
   IPTABLES_FILE_V4=/tmp/null4
   IPTABLES_FILE_V6=/tmp/null6
@@ -175,7 +175,7 @@ ip6tables -A OUTPUT -j LOG --log-prefix "Blocked IPv6 output: "
 ip6tables -A FORWARD -j LOG --log-prefix "Blocked IPv6 forward: "
 
 # Block all other traffic.
-#   DROP-vs-REJECT? When OpenVPN is down temporarily or is reconnecting,
+#   DROP-vs-REJECT? When the VPN is down temporarily or is reconnecting,
 #   REJECT notifies all applications and they close their connections.
 #   With DROP, the apps treat the packets as lost on the way, and thus retry.
 iptables -A INPUT -j DROP
@@ -187,7 +187,7 @@ ip6tables -A FORWARD -j REJECT
 
 echo "The firewall is configured."
 
-# Dump the filewall. It is atomically restored in the real networking container.
+# Dump the firewall. It is atomically restored in the real networking container.
 # For this to work, it should atomically appear: hence, a temp file and `mv`.
 temp_file_v4="${IPTABLES_FILE_V4}.tmp"
 temp_file_v6="${IPTABLES_FILE_V6}.tmp"
