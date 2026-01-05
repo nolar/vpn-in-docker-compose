@@ -8,8 +8,6 @@
 # * DNS resolvers to resolve the VPN's hostnames to IP addresses.
 # * VPN-tunnelled traffic itself.
 #
-# IPv6 is blocked: I do not understand it, so I cannot configure it.
-#
 # Two modes of usage are supported (not intentionally, but as a side effect):
 #
 # * Recommended: In a standalone networking context (`network_mode: bridge`),
@@ -42,28 +40,42 @@ error_handler() {
 }
 trap "error_handler" ERR INT TERM
 
+# Where to get the pre-resolved IPs of DNS servers.
+: ${ALLOWED_IPS_DIR:="/cache/servers"}
+#: ${ALLOWED_IPS_FILE_V4:=""}
+#: ${ALLOWED_IPS_FILE_V6:=""}
+
 # Get the IPs resolved for the VPN servers, as many as possible (if set).
 # If neither of these vars is set, ignore. If set, but unreadable, then fail.
 # The cache is populated by `update-airvpn-ips.sh` before the firewall script.
-if [[ "${ALLOWED_IPS_FILE:-}" || "${ALLOWED_IPS_DIR:-}" ]]; then
-  ALLOWED_IPS=$(cat "${ALLOWED_IPS_FILE:-${ALLOWED_IPS_DIR}/all.txt}")
+if [[ "${ALLOWED_IPS_FILE_V4:-}" || "${ALLOWED_IPS_DIR:-}" ]]; then
+  ALLOWED_IPS_V4=$(cat "${ALLOWED_IPS_FILE_V4:-${ALLOWED_IPS_DIR}/all.v4.txt}")
 else
-  ALLOWED_IPS=""
+  ALLOWED_IPS_V4=""
+fi
+if [[ "${ALLOWED_IPS_FILE_V6:-}" || "${ALLOWED_IPS_DIR:-}" ]]; then
+  ALLOWED_IPS_V6=$(cat "${ALLOWED_IPS_FILE_V6:-${ALLOWED_IPS_DIR}/all.v6.txt}")
+else
+  ALLOWED_IPS_V6=""
 fi
 
 # One special IP or a range (but only one) that is used for monitoring/alerting.
 # Its traffic, even when blocked, is not logged as suspicious.
-: ${STATUS_IP:=""}
+: ${STATUS_IP_V4:=""}
+: ${STATUS_IP_V6:=""}
 
 # Specially allowed IPs needed for the setup to function.
-: ${SPECIAL_IPS:=""}
+: ${SPECIAL_IPS_V4:=""}
+: ${SPECIAL_IPS_V6:=""}
 
 # Which IPs to treat as a local network. By default, all private networks are
 # considered safe. It is better to narrow this list with more specific ranges.
-: ${LOCAL_IPS:="192.168.0.0/16 172.16.0.0/12 10.0.0.0/8"}
+: ${LOCAL_IPS_V4:="192.168.0.0/16 172.16.0.0/12 10.0.0.0/8"}
+: ${LOCAL_IPS_V6:="fd00::/8"}
 
 # If there is a DNS resolver, allow its traffic too.
-: ${NS:="8.8.4.4 8.8.8.8"}
+: ${NS_V4:="8.8.4.4 8.8.8.8"}
+: ${NS_V6:="2001:4860:4860::8844 2001:4860:4860::8888"}
 
 # OpenVPN interfaces where the traffic is fully allowed.
 : ${VPN_INTERFACES:="tun+ wg+"}
@@ -73,11 +85,12 @@ fi
 : ${IPTABLES_FILE_V6:="/tmp/ip6tables.txt"}
 
 # For the first run (insta-block), block ourselves without initial state/cache,
-# and do not produce no side-effects in the real firewall/network containers.
+# and produce no side-effects in the real firewall/network containers.
 if [[ ${1:-} == initial ]]; then
   IPTABLES_FILE_V4=/tmp/null4
   IPTABLES_FILE_V6=/tmp/null6
-  ALLOWED_IPS_FILE=
+  ALLOWED_IPS_FILE_V4=
+  ALLOWED_IPS_FILE_V6=
   ALLOWED_IPS_DIR=
 fi
 
@@ -130,6 +143,7 @@ iptables -A INPUT -p tcp --tcp-flags ALL ALL -j LOG --log-prefix "Blocked xmas: 
 iptables -A INPUT -p tcp --tcp-flags ALL ALL -j DROP
 iptables -A INPUT -p tcp --tcp-flags ALL NONE -j LOG --log-prefix "Blocked null: "
 iptables -A INPUT -p tcp --tcp-flags ALL NONE -j DROP
+# TODO: the same for IPv6? is it applicable at all?
 
 # System or intra-host traffic.
 iptables -A INPUT -i lo -j ACCEPT
@@ -147,47 +161,63 @@ done
 
 # Non-VPN traffic that is coming to us in response to our outgoing traffic.
 iptables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+ip6tables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
 
 # Local broadcasting from us or to us. TODO: Is it needed? For what?
 iptables -A INPUT -d 255.255.255.255 -j ACCEPT
 iptables -A OUTPUT -d 255.255.255.255 -j ACCEPT
+ip6tables -A INPUT -d fe80::/10 -j ACCEPT  # link-local non-routable
+ip6tables -A OUTPUT -d fe80::/10 -j ACCEPT  # link-local non-routable
+ip6tables -A INPUT -d ff02::1 -j ACCEPT  # all-nodes multicast
+ip6tables -A OUTPUT -d ff02::1 -j ACCEPT  # all-nodes multicast
+ip6tables -A INPUT -d ff02::2 -j ACCEPT  # all-routers multicast
+ip6tables -A OUTPUT -d ff02::2 -j ACCEPT  # all-routers multicast
+#ip6tables -A INPUT -d ff00::/8 -j ACCEPT  # generic multicast
+#ip6tables -A OUTPUT -d ff00::/8 -j ACCEPT  # generic multicast
 
 # Friendly traffic with the local and/or Docker bridged networks.
 # Note A: to our own ips in those networks (i.e. eth0), but initiated by others.
 # Note B: to other ips in those networks, but initiated by us.
-for ip in $LOCAL_IPS; do
+for ip in ${LOCAL_IPS_V4}; do
   iptables -A INPUT -d "$ip" -j ACCEPT  # see note A
   iptables -A OUTPUT -d "$ip" -j ACCEPT # see note B
 done
+for ip in ${LOCAL_IPS_V6}; do
+  ip6tables -A INPUT -d "$ip" -j ACCEPT  # see note A
+  ip6tables -A OUTPUT -d "$ip" -j ACCEPT # see note B
+done
 
 # Special-purpose addresses, DNS resolvers, VPN servers (initial connections).
-for ip in ${NS} ${SPECIAL_IPS} ${ALLOWED_IPS}; do
+for ip in ${NS_V4} ${SPECIAL_IPS_V4} ${ALLOWED_IPS_V4}; do
   iptables -A OUTPUT -d "$ip" -j ACCEPT
+done
+for ip in ${NS_V6} ${SPECIAL_IPS_V6} ${ALLOWED_IPS_V6}; do
+  ip6tables -A OUTPUT -d "$ip" -j ACCEPT
 done
 
 # Catch all unwanted traffic. Ignore the IPs that we use for status checking
 # (pinging/tracerouting), which generate the unwanted traffic by design.
-iptables -A INPUT -j LOG --log-prefix "Blocked IPv4 input: " ${STATUS_IP:+ ! -d "${STATUS_IP}"}
-iptables -A OUTPUT -j LOG --log-prefix "Blocked IPv4 output: " ${STATUS_IP:+ ! -d "${STATUS_IP}"}
+iptables -A INPUT -j LOG --log-prefix "Blocked IPv4 input: " ${STATUS_IP_V4:+ ! -d "${STATUS_IP_V4}"}
+iptables -A OUTPUT -j LOG --log-prefix "Blocked IPv4 output: " ${STATUS_IP_V4:+ ! -d "${STATUS_IP_V4}"}
 iptables -A FORWARD -j LOG --log-prefix "Blocked IPv4 forward: "
-ip6tables -A INPUT -j LOG --log-prefix "Blocked IPv6 input: "
-ip6tables -A OUTPUT -j LOG --log-prefix "Blocked IPv6 output: "
+ip6tables -A INPUT -j LOG --log-prefix "Blocked IPv6 input: " ${STATUS_IP_V6:+ ! -d "${STATUS_IP_V6}"}
+ip6tables -A OUTPUT -j LOG --log-prefix "Blocked IPv6 output: " ${STATUS_IP_V6:+ ! -d "${STATUS_IP_V6}"}
 ip6tables -A FORWARD -j LOG --log-prefix "Blocked IPv6 forward: "
 
 # Block all other traffic.
-#   DROP-vs-REJECT? When OpenVPN is down temporarily or is reconnecting,
+#   DROP-vs-REJECT? When the VPN is down temporarily or is reconnecting,
 #   REJECT notifies all applications and they close their connections.
 #   With DROP, the apps treat the packets as lost on the way, and thus retry.
 iptables -A INPUT -j DROP
 iptables -A OUTPUT -j DROP
 iptables -A FORWARD -j REJECT --reject-with icmp-admin-prohibited
 ip6tables -A INPUT -j DROP
-ip6tables -A OUTPUT -j REJECT
-ip6tables -A FORWARD -j REJECT
+ip6tables -A OUTPUT -j DROP
+ip6tables -A FORWARD -j REJECT --reject-with icmp6-adm-prohibited
 
 echo "The firewall is configured."
 
-# Dump the filewall. It is atomically restored in the real networking container.
+# Dump the firewall. It is atomically restored in the real networking container.
 # For this to work, it should atomically appear: hence, a temp file and `mv`.
 temp_file_v4="${IPTABLES_FILE_V4}.tmp"
 temp_file_v6="${IPTABLES_FILE_V6}.tmp"

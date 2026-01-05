@@ -19,8 +19,6 @@ All components are optional and can be disabled. Though, without some of them, t
 
 The setup does not affect other containers or applications running in the same Docker.
 
-Only IPv4 addresses and traffic are currently supported. IPv6 is disabled and blocked.
-
 [AirVPN](https://airvpn.org/) is used as a VPN provider, but any other WireGuard-compatible one can be used (if you have a config file for WireGuard and know their IP ranges for monitoring/alerting).
 
 
@@ -28,7 +26,7 @@ Only IPv4 addresses and traffic are currently supported. IPv6 is disabled and bl
 
 Optional: register at and get an API key from https://ipstack.com/, put it to `ipstack.env`.
 
-Mandatory: put your WireGuard VPN config file to `wireguard/wg0.conf` (any other `wg*` name should work, even a few of them at the same time). If there is a problem with resolv-conf not found (e.g. in Ubuntu images), comment out the `DNS=…` line. To be on a safer side, remove the IPv6 addresses from the config file.
+Mandatory: put your WireGuard VPN config file to `wireguard/wg0.conf` (any other `wg*` name should work, even a few of them at the same time). If there is a problem with resolv-conf not found (e.g. in Ubuntu images), comment out the `DNS=…` line.
 
 Start the setup:
 
@@ -53,6 +51,17 @@ To clean it up:
 ```shell script
 docker compose down --volumes --remove-orphans
 ```
+
+
+## IPv6 support
+
+IPv6 over the VPN tunnel (if available) is fully supported.
+
+IPv6 on the physical layer is supported only hypothetically — all IPv6 firewall rules mirror the same logic for IPv4. However, I was unable to make IPv6 work in OrbStack with firewall on: it always leads to "Address unreachable" in the "rulemaker" container with the default bridged network (i.e. not the special-purpose VPN network of all other containers) — thus preventing the DNS resolution of VPN servers, thus preventing adding them to the allow-lists, thus preventing the connections to the IPv6 VPN servers.
+
+In other words, the underlying physical IPv6 is likely non-functional at all. But even if it is functional, it will be restricted the same as IPv4 — with the exception of some protocol-specific nuances like link-local and multicast addresses.
+
+As this is an educational project, playing with IPv6 is left as an exercise for the reader.
 
 
 ## Monitoring
@@ -103,16 +112,19 @@ When the network is exposed, the status reporting looks like this:
 To simulate:
 
 ```shell script
-docker compose stop wireguard firewall
+docker compose stop wireguard firewall transmission
 docker compose exec network iptables -F
 docker compose exec network iptables -P INPUT ACCEPT
 docker compose exec network iptables -P OUTPUT ACCEPT
+docker compose exec network ip6tables -F
+docker compose exec network ip6tables -P INPUT ACCEPT
+docker compose exec network ip6tables -P OUTPUT ACCEPT
 ```
 
 To restore:
 
 ```shell script
-docker compose start wireguard firewall
+docker compose start wireguard firewall transmission
 ```
 
 Please note that to expose yourself, you need to do both: configure the firewall to pass the traffic **AND** shut down the VPN connection. As long as the VPN connection is alive, the traffic goes through it even if the firewall is in the permissive mode.
