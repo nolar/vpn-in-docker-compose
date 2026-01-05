@@ -19,9 +19,9 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/b
 : ${COUNTRY_CACHE_TIME:=50000}
 
 # Which IP to ping/traceroute for checking the connection.
-# Just google for "pingable ip".
-: ${STATUS_IPv4:="139.130.4.5"}
-: ${STATUS_IPv6:="2001:4860:4860::8888"}
+# Just google for "pingable ip". It must NOT be the DNS IP!
+: ${STATUS_IP_V4:="139.130.4.5"}
+: ${STATUS_IP_V6:="2620:fe::fe"}
 
 # The DNS resolver that is un-blocked in the firewall.
 : ${NS:="8.8.4.4"}
@@ -165,10 +165,10 @@ started=$(now)
   report_country IPv4 "${country4}"
   report_country IPv6 "${country6}"
 
-  nexthop4=$(get_next_hop -4 "${STATUS_IPv4}")
-  nexthop6=$(get_next_hop -6 "${STATUS_IPv6}")
-  report_nexthop IPv4 "${nexthop4}" "10."
-  report_nexthop IPv6 "${nexthop6}" "fd7d:76ee:"
+  nexthop4=$(get_next_hop -4 "${STATUS_IP_V4}")
+  nexthop6=$(get_next_hop -6 "${STATUS_IP_V6}")
+  report_nexthop IPv4 "${nexthop4}" "10.128."
+  report_nexthop IPv6 "${nexthop6}" "fd7d:76ee:e68f:a993:"
 
   # Print some additional information about the networking setup.
   # It is better to always see it directly rather than interpreted.
@@ -181,10 +181,10 @@ started=$(now)
   # to make sure these interfaces are firewalled as needed -- for extra safety.
   echo
   echo "Next v4 hops per interface (only tun*/wg* should be permitted):" | ansi bold
-  ip -o a | awk '{print $2}' | sort -u | grep -v '^lo' | xargs -I {} bash -c 'echo -en "{}\t"; traceroute -4 -n -m1 -q3 -i {} "'"${STATUS_IPv4}"'" 2>&1 | tail -n+2 || true'
+  ip -o a | awk '{print $2}' | sort -u | grep -v '^lo' | xargs -I {} bash -c 'echo -en "{}\t"; traceroute -4 -n -m1 -q3 -i {} "'"${STATUS_IP_V4}"'" 2>&1 | tail -n+2 || true'
   echo
   echo "Next v6 hops per interface (only tun*/wg* should be permitted):" | ansi bold
-  ip -o a | awk '{print $2}' | sort -u | grep -v '^lo' | xargs -I {} bash -c 'echo -en "{}\t"; traceroute -6 -n -m1 -q3 -i {} "'"${STATUS_IPv6}"'" 2>&1 | tail -n+2 || true'
+  ip -o a | awk '{print $2}' | sort -u | grep -v '^lo' | xargs -I {} bash -c 'echo -en "{}\t"; traceroute -6 -n -m1 -q3 -i {} "'"${STATUS_IP_V6}"'" 2>&1 | tail -n+2 || true'
 
   echo
 } >"$temp_file" || true

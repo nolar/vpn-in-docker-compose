@@ -7,7 +7,8 @@ networks:
       driver: default
       config:
         - subnet: "172.30.172.0/24"
-    enable_ipv6: false
+        - subnet: "fdaa:bbbb:cccc:dddd::/64"
+    enable_ipv6: true
 
 services:
 
@@ -137,11 +138,10 @@ services:
     environment:
       IPTABLES_FILE_V4: /iptables/iptables-v4.txt
       IPTABLES_FILE_V6: /iptables/iptables-v6.txt
-      ALLOWED_IPS_FILE: /cache/servers/all.txt
-      ALLOWED_IPS_DIR: /cache/servers
-      LOCAL_IPS: 172.30.172.0/24
-      STATUS_IP: 139.130.4.5
-      NS: 8.8.4.4
+      LOCAL_IPS_V4: 172.30.172.0/24  # the same as in the network
+      LOCAL_IPS_V6: fdaa:bbbb:cccc:dddd::/64  # the same as in the network
+      STATUS_IP_V4: 139.130.4.5  # also prohibited, but not logged
+      STATUS_IP_V6: 2620:fe::fe  # also prohibited, but not logged
     volumes:
       - ./cache/iptables:/iptables:rw
       - ./cache/servers:/cache/servers
