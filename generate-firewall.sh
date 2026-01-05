@@ -45,6 +45,16 @@ trap "error_handler" ERR INT TERM
 #: ${ALLOWED_IPS_FILE_V4:=""}
 #: ${ALLOWED_IPS_FILE_V6:=""}
 
+# For the first run (insta-block), block ourselves without initial state/cache,
+# and produce no side-effects in the real firewall/network containers.
+if [[ ${1:-} == initial ]]; then
+  IPTABLES_FILE_V4=/tmp/null4
+  IPTABLES_FILE_V6=/tmp/null6
+  ALLOWED_IPS_FILE_V4=
+  ALLOWED_IPS_FILE_V6=
+  ALLOWED_IPS_DIR=
+fi
+
 # Get the IPs resolved for the VPN servers, as many as possible (if set).
 # If neither of these vars is set, ignore. If set, but unreadable, then fail.
 # The cache is populated by `update-airvpn-ips.sh` before the firewall script.
@@ -83,16 +93,6 @@ fi
 # Where to put the resulting dump files.
 : ${IPTABLES_FILE_V4:="/tmp/iptables.txt"}
 : ${IPTABLES_FILE_V6:="/tmp/ip6tables.txt"}
-
-# For the first run (insta-block), block ourselves without initial state/cache,
-# and produce no side-effects in the real firewall/network containers.
-if [[ ${1:-} == initial ]]; then
-  IPTABLES_FILE_V4=/tmp/null4
-  IPTABLES_FILE_V6=/tmp/null6
-  ALLOWED_IPS_FILE_V4=
-  ALLOWED_IPS_FILE_V6=
-  ALLOWED_IPS_DIR=
-fi
 
 echo "Generating the firewall rules..."
 
