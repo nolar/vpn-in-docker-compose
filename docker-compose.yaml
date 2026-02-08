@@ -22,7 +22,7 @@ services:
     entrypoint: [/app/wait-for-safety.sh]
     command: [/app/transmission.sh]
     environment:
-      LOCAL_IPS: 172.30.172.*
+      LOCAL_IPS: 172.30.172.*,fdaa:bbbb:cccc:dddd:*
       PEER_PORT: 46112  # as (and if) configured in the VPN provider
     volumes:
       - ./:/app
